@@ -1,4 +1,3 @@
-
 from collections import namedtuple
 from globalPluginHandler import GlobalPlugin
 import logging
@@ -15,8 +14,6 @@ addonHandler.initTranslation()
 import api
 import textInfos
 
-
-
 # Add bundled copy of PIL to module search path.
 sys.path.append(os.path.join(PLUGIN_DIR, "PIL"))
 import ImageGrab
@@ -26,34 +23,69 @@ import beep_sequence
 import ocrspace
 sys.path.remove(PLUGIN_DIR)
 
-OcrWord = namedtuple("OcrWord", ("offset", "left", "top"))
-
-class OCRParser(object):
-
-	def __init__(self, data, leftCoordOffset, topCoordOffset):
-		self._leftCoordOffset = leftCoordOffset
-		self._topCoordOffset = topCoordOffset
-		self.textLen = 0
-		self.lines = []
-		self.words = []
 
 class OCRTextInfo(textInfos.offsets.OffsetsTextInfo):
 
-	def __init__(self, result=None, *args, **kwargs):
+	def __init__(self, point=None, result=None, *args, **kwargs):
+		self.point = point
 		self.result = result
 		super(OCRTextInfo, self).__init__(*args, **kwargs)
 
-	def _getStoryText(self):
-		return self.get_text()
-
-	def _getStoryLength(self):
-		return len(self.get_text())
-
-	def get_text(self):
+	def get_parsed_text(self):
 		return self.result[0]['ParsedText']
 
+	def _getStoryText(self):
+		return self.get_parsed_text()
+
+	def _getStoryLength(self):
+		return len(self._getStoryText())
+
+	def _getTextRange(self, start, end):
+		return self.get_parsed_text()[start:end]
+
 	def copy(self):
-		return OCRTextInfo(obj=self.obj, position=self.bookmark, result=self.result)
+		return OCRTextInfo(obj=self.obj, position=self.bookmark, point=self.point, result=self.result)
+
+	def _getLineOffsets(self, offset):
+		logger.info("offset: ", offset)
+		lines = self.get_parsed_text().split('\n')
+		start, end = 0, 0
+		logger.info("lines: ", len(lines))
+		for line in lines:
+			line = line + '\n'
+			start = end
+			end = end + len(line)
+			if start <= offset and end > offset:
+				return start, end
+
+	def _getPointFromOffset(self, offset):
+		start, end = 0, 0
+		for word in self.get_words():
+			start = end
+			end += len(word)
+			end += 1
+			if offset >= start and offset < end:
+				left, top = self.point
+				left += word['Left']
+				top += word['Top']
+				return textInfos.Point(left, top)
+
+	def _getOffsetFromPoint(self, x, y):
+		offset = 0
+		for word in self.get_words():
+			offset += len(word) + 1
+			left = word['Left'] + self.point[0]
+			top = word['Top'] + self.point[1]
+			width = word['Width']
+			height = word['Height']
+			box = (left, top, left + width, top + height)
+			if is_in_box((x, y), box):
+				return offset - (len(word) + 1)
+
+	def get_words(self):
+		for line in self.result[0]['TextOverlay']['Lines']:
+			for word in line['Words']:
+				yield word
 
 class GlobalPlugin(GlobalPlugin):
 	scriptCategory = _("Cloud OCR")
@@ -61,7 +93,6 @@ class GlobalPlugin(GlobalPlugin):
 	def __init__(self, *args, **kwargs):
 		super(GlobalPlugin, self).__init__(*args, **kwargs)
 		self.OCR_API = ocrspace.OCRSpaceAPI(key='3c42208a1588957')
-
 
 	def script_OCR(self, gesture):
 		"""OCR the contents of the current navigator object using a remote, cloud-based service."""
@@ -80,7 +111,7 @@ class GlobalPlugin(GlobalPlugin):
 		os.unlink(temp_path)
 		if recognised is None:
 			return
-		nav.makeTextInfo = lambda position: OCRTextInfo(obj=nav, position=position, result=recognised)
+		nav.makeTextInfo = lambda position: OCRTextInfo(obj=nav, position=position, point=(left, top), result=recognised)
 		api.setReviewPosition(nav.makeTextInfo(textInfos.POSITION_FIRST))
 		beep_sequence.beep_sequence((480, 100))
 
@@ -89,3 +120,7 @@ class GlobalPlugin(GlobalPlugin):
 		"kb:shift+NVDA+r": "OCR",
 	}
 
+def is_in_box(position, box):
+	top, bottom, left, right = box
+	x, y = position
+	return left <= x < right and bottom <= y < top
