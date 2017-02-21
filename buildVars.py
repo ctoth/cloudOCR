@@ -21,7 +21,7 @@ addon_info = {
 	# Translators: Long description to be shown for this add-on on add-on information from add-ons manager
 	"addon_description" : _("""Use a free cloud-based OCR service to recognise text on the screen"""),
 	# version
-	"addon_version" : "0.1",
+	"addon_version" : "0.2",
 	# Author(s)
 	"addon_author" : u"Christopher Toth <q@q-continuum.net>",
 	# URL for the add-on documentation support
