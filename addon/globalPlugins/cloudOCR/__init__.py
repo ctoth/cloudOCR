@@ -19,6 +19,8 @@ sys.path.append(os.path.join(PLUGIN_DIR, "PIL"))
 import ImageGrab
 del sys.path[-1]
 
+import json
+
 import beep_sequence
 import ocrspace
 sys.path.remove(PLUGIN_DIR)
